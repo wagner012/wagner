@@ -7,8 +7,8 @@ function Decrypt-Image {
     $iv = @(0..15 | ForEach-Object { 0 })  # 16-byte zero IV
 
     $tempPath = [System.IO.Path]::GetTempPath()
-    $hiddenDir = Join-Path $tempPath "hidden"
-    $inputFile = Join-Path $hiddenDir "photo.dat"
+    $hiddenDir = Join-Path $tempPath "hidden_files"
+    $inputFile = Join-Path $hiddenDir "image.enc"
     $outputFile = Join-Path $hiddenDir "photo.jpg"
 
     if (-Not (Test-Path $inputFile)) {
