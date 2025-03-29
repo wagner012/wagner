@@ -2,13 +2,13 @@ Add-Type -AssemblyName System.Security
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Decrypt-Image {
-    $keyString = "secureKey12345".PadRight(16)
+    $keyString = "secretKey12345".PadRight(16)
     $key = [System.Text.Encoding]::UTF8.GetBytes($keyString)
     $iv = @(0..15 | ForEach-Object { 0 })  # 16-byte zero IV
 
     $tempPath = [System.IO.Path]::GetTempPath()
-    $hiddenDir = Join-Path $tempPath "hidden_files"
-    $inputFile = Join-Path $hiddenDir "image.enc"
+    $hiddenDir = Join-Path $tempPath "hidden"
+    $inputFile = Join-Path $hiddenDir "photo.dat"
     $outputFile = Join-Path $hiddenDir "photo.jpg"
 
     if (-Not (Test-Path $inputFile)) {
