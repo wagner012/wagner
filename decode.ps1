@@ -2,9 +2,10 @@ Add-Type -AssemblyName System.Security
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Decrypt-Image {
-    $keyString = "secretKey12345".PadRight(16)
-    $key = [System.Text.Encoding]::UTF8.GetBytes($keyString)
-    $iv = @(0..15 | ForEach-Object { 0 })  # 16-byte zero IV
+    # The key must match the one used during encryption
+    $keyString = "secureKey12345" # Use the same key as in the C# encryption code
+    $key = [System.Text.Encoding]::UTF8.GetBytes($keyString.PadRight(16, ' '))  # Ensure the key is 16 bytes
+    $iv = @(0..15 | ForEach-Object { 0 })  # 16-byte zero IV, same as during encryption
 
     $tempPath = [System.IO.Path]::GetTempPath()
     $hiddenDir = Join-Path $tempPath "hidden"
@@ -19,10 +20,12 @@ function Decrypt-Image {
     try {
         $cipherBytes = [System.IO.File]::ReadAllBytes($inputFile)
 
+        # AES decryption
         $aes = [System.Security.Cryptography.Aes]::Create()
         $aes.Key = $key
         $aes.IV = $iv
 
+        # Ensure that you're using the correct decryption mode and padding scheme
         $decryptor = $aes.CreateDecryptor()
         $ms = New-Object System.IO.MemoryStream
         $cs = New-Object System.Security.Cryptography.CryptoStream($ms, $decryptor, [System.Security.Cryptography.CryptoStreamMode]::Write)
