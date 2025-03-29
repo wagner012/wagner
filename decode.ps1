@@ -2,7 +2,7 @@ Add-Type -AssemblyName System.Security
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Decrypt-Image {
-    $keyString = "secretKey123".PadRight(16)
+    $keyString = "secureKey12345".PadRight(16)
     $key = [System.Text.Encoding]::UTF8.GetBytes($keyString)
     $iv = @(0..15 | ForEach-Object { 0 })  # 16-byte zero IV
 
